@@ -1,0 +1,420 @@
+<!doctype html>
+<!--
+  LojaVirtual_teste.html
+  Página de demo: Loja Virtual simples usando somente HTML / CSS / JavaScript + Bootstrap
+  - Paleta principal: Verde e branco
+  - Código limpo e bem documentado
+  - Produtos renderizados a partir de um template reutilizável (cada card tem ID, Nome, Descrição, Preço e botão 'Adicionar')
+  - Carrinho com persistência em localStorage, remoção de itens e finalização
+  - Ao finalizar, gera um JSON com os itens e prepara uma mensagem pronta para enviar via WhatsApp
+
+  Como usar:
+  1) Salve este arquivo como LojaVirtual_teste.html
+  2) Abra no navegador (duplo clique)
+  3) Adapte o array `products` para adicionar/remover produtos ou altere IDs/infos
+
+  Autor: Gerado por ChatGPT (Perseu)
+-->
+
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loja Virtual - Demo</title>
+
+    <!-- Bootstrap 5 CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+      /* Paleta principal: verde e branco. Demais cores neutras escolhidas para contraste. */
+      :root{
+        --brand-green: #2e8b57; /* verde principal */
+        --brand-green-dark: #246b47; /* verde escuro para hover */
+        --accent: #f8fdf8; /* leve tom claro */
+      }
+
+      body{
+        background: linear-gradient(180deg, #ffffff 0%, #f7fdf7 100%);
+        color: #0b2a1a;
+      }
+
+      /* Navbar */
+      .navbar-brand{
+        font-weight: 700;
+        color: var(--brand-green);
+      }
+
+      .btn-green{
+        background: var(--brand-green);
+        color: #fff;
+        border: none;
+      }
+      .btn-green:hover{ background: var(--brand-green-dark); }
+
+      /* Card */
+      .product-card{
+        border: 1px solid rgba(0,0,0,0.06);
+        border-radius: 12px;
+        transition: transform 150ms ease, box-shadow 150ms ease;
+      }
+      .product-card:hover{ transform: translateY(-6px); box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
+
+      .price-tag{
+        font-weight: 700;
+        color: var(--brand-green-dark);
+      }
+
+      /* Badge do carrinho */
+      .cart-badge{
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        font-size: 0.75rem;
+      }
+
+      /* Rodapé simples */
+      footer{
+        margin-top: 40px;
+        padding: 20px 0;
+        text-align: center;
+        color: rgba(0,0,0,0.6);
+      }
+
+      /* Responsividade para imagens demo */
+      .product-img{
+        height: 150px;
+        object-fit: cover;
+        border-radius: 8px 8px 0 0;
+        background: #e9f5ee;
+      }
+
+      /* Pequeno destaque no JSON final */
+      pre.json-output{
+        background: #fafafa;
+        border-left: 6px solid var(--brand-green);
+        padding: 12px;
+        border-radius: 6px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+      <div class="container">
+        <a class="navbar-brand" href="#">Loja Verde</a>
+
+        <div class="ms-auto d-flex align-items-center position-relative">
+          <button class="btn btn-outline-success me-2" id="view-cart-btn" data-bs-toggle="modal" data-bs-target="#cartModal">
+            Carrinho
+            <span class="badge bg-success cart-badge" id="cart-count">0</span>
+          </button>
+          <button class="btn btn-link text-decoration-none" id="clear-storage-btn" title="Limpar carrinho e sessão">Limpar</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- CONTAINER PRINCIPAL -->
+    <main class="container py-5">
+      <header class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h1 class="h3 mb-0">Produtos</h1>
+          <small class="text-muted">Página de teste — design simples em verde e branco</small>
+        </div>
+
+        <div>
+          <input id="search-input" class="form-control" placeholder="Pesquisar produto..." style="min-width:220px;" />
+        </div>
+      </header>
+
+      <!-- GRID DE PRODUTOS -->
+      <div class="row" id="products-row">
+        <!-- Os cards serão injetados aqui via JavaScript -->
+      </div>
+
+      <!-- RODAPÉ -->
+      <footer>
+        <small>Demo de loja | Desenvolvido com HTML / CSS / JavaScript / Bootstrap</small>
+      </footer>
+    </main>
+
+    <!-- MODAL: CARRINHO -->
+    <div class="modal fade" id="cartModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Seu Carrinho</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div id="cart-items-list">
+              <!-- Itens do carrinho serão renderizados aqui -->
+            </div>
+
+            <hr />
+
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <strong>Total:</strong>
+                <span class="ms-2" id="cart-total">R$ 0,00</span>
+              </div>
+
+              <div>
+                <button class="btn btn-outline-danger me-2" id="clear-cart-btn">Remover todos</button>
+                <button class="btn btn-green" id="checkout-btn">Finalizar pedido</button>
+              </div>
+            </div>
+
+            <!-- JSON gerado ao finalizar -->
+            <div class="mt-3 d-none" id="final-json-area">
+              <h6>JSON do pedido (pronto para envio via WhatsApp)</h6>
+              <pre class="json-output" id="final-json"></pre>
+              <a class="btn btn-success" id="whatsapp-link" target="_blank">Abrir WhatsApp</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+      /*************************************************************************
+       * Dados dos produtos (exemplo)
+       * Cada produto deve ter um ID único (string ou número), nome, descrição, preço (número)
+       * e opcionalmente uma imagem.
+       *
+       * Para adicionar/alterar produtos, modifique este array. O restante do código
+       * utiliza somente o ID para operações do carrinho.
+       *************************************************************************/
+      const products = [
+        { id: 'p1', name: 'Camiseta Verde', description: 'Camiseta 100% algodão. Conforto e estilo.', price: 59.9, img: '' },
+        { id: 'p2', name: 'Boné Branco', description: 'Boné com ajuste traseiro e logo bordado.', price: 39.9, img: '' },
+        { id: 'p3', name: 'Caneca Eco', description: 'Caneca reutilizável, ideal para café.', price: 24.5, img: '' },
+        { id: 'p4', name: 'Mochila Compacta', description: 'Leve, com compartimento para notebook 13".', price: 129.0, img: '' }
+      ];
+
+      /*************************************************************************
+       * Estado do carrinho
+       * Estrutura: array de itens { id, name, price, quantity }
+       * Persistimos no localStorage para manter entre recarregamentos
+       *************************************************************************/
+      const STORAGE_KEY = 'loja_demo_cart_v1';
+
+      function loadCart(){
+        const raw = localStorage.getItem(STORAGE_KEY);
+        try{
+          return raw ? JSON.parse(raw) : [];
+        }catch(e){
+          console.warn('Erro ao ler carrinho do localStorage, restaurando.');
+          return [];
+        }
+      }
+
+      function saveCart(cart){
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
+      }
+
+      // Estado inicial
+      let cart = loadCart();
+
+      /*************************************************************************
+       * RENDERIZAÇÃO DOS PRODUTOS
+       * Criamos um card reutilizável para cada produto.
+       *************************************************************************/
+      const productsRow = document.getElementById('products-row');
+
+      function createProductCard(product){
+        // Criamos o HTML do card com os campos pedidos (ID, Nome, Descrição, Preço, botão add)
+        const col = document.createElement('div');
+        col.className = 'col-12 col-sm-6 col-md-4 col-lg-3 mb-4';
+
+        col.innerHTML = `
+          <div class="product-card h-100">
+            <img class="w-100 product-img" src="https://via.placeholder.com/400x200?text=${encodeURIComponent(product.name)}" alt="${product.name}">
+            <div class="p-3 d-flex flex-column h-100">
+              <div class="mb-2">
+                <small class="text-muted">ID: <strong>${product.id}</strong></small>
+              </div>
+              <h5 class="mb-1">${product.name}</h5>
+              <p class="small text-muted mb-3">${product.description}</p>
+
+              <div class="mt-auto d-flex justify-content-between align-items-center">
+                <div class="price-tag">R$ ${product.price.toFixed(2).replace('.',',')}</div>
+                <button class="btn btn-sm btn-green" data-product-id="${product.id}">Adicionar</button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // Delegamos o evento de adicionar ao botão interno
+        const btn = col.querySelector('button[data-product-id]');
+        btn.addEventListener('click', () => addToCart(product.id));
+
+        return col;
+      }
+
+      function renderProducts(filter = ''){
+        productsRow.innerHTML = '';
+        const q = filter.trim().toLowerCase();
+        const filtered = products.filter(p => (!q) || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+        filtered.forEach(p => productsRow.appendChild(createProductCard(p)));
+      }
+
+      /*************************************************************************
+       * FUNÇÕES DO CARRINHO
+       *************************************************************************/
+      function findProductById(id){
+        return products.find(p => p.id === id);
+      }
+
+      function addToCart(productId){
+        const product = findProductById(productId);
+        if(!product) return alert('Produto não encontrado (ID: ' + productId + ')');
+
+        // Se já existe no carrinho, aumenta quantidade
+        const existing = cart.find(i => i.id === productId);
+        if(existing){
+          existing.quantity += 1;
+        }else{
+          cart.push({ id: product.id, name: product.name, price: product.price, quantity: 1 });
+        }
+
+        saveCart(cart);
+        updateCartUI();
+      }
+
+      function removeFromCart(productId){
+        cart = cart.filter(i => i.id !== productId);
+        saveCart(cart);
+        updateCartUI();
+      }
+
+      function clearCart(){
+        cart = [];
+        saveCart(cart);
+        updateCartUI();
+      }
+
+      function getCartTotal(){
+        return cart.reduce((s, it) => s + (it.price * it.quantity), 0);
+      }
+
+      /*************************************************************************
+       * ATUALIZAÇÃO DA INTERFACE DO CARRINHO
+       *************************************************************************/
+      const cartCountEl = document.getElementById('cart-count');
+      const cartItemsListEl = document.getElementById('cart-items-list');
+      const cartTotalEl = document.getElementById('cart-total');
+      const finalJsonArea = document.getElementById('final-json-area');
+      const finalJsonPre = document.getElementById('final-json');
+      const whatsappLink = document.getElementById('whatsapp-link');
+
+      function formatCurrencyBR(value){
+        return 'R$ ' + value.toFixed(2).replace('.', ',');
+      }
+
+      function updateCartUI(){
+        // Contador
+        const totalItems = cart.reduce((s, it) => s + it.quantity, 0);
+        cartCountEl.textContent = totalItems;
+
+        // Lista
+        if(cart.length === 0){
+          cartItemsListEl.innerHTML = '<p class="text-muted">Seu carrinho está vazio.</p>';
+        }else{
+          cartItemsListEl.innerHTML = '';
+          cart.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'd-flex align-items-center mb-3';
+            row.innerHTML = `
+              <div class="flex-grow-1">
+                <div><strong>${item.name}</strong> <small class="text-muted">(ID: ${item.id})</small></div>
+                <div class="small text-muted">Quantidade: ${item.quantity} × ${formatCurrencyBR(item.price)}</div>
+              </div>
+              <div class="ms-3 text-end">
+                <div class="mb-2">${formatCurrencyBR(item.price * item.quantity)}</div>
+                <button class="btn btn-sm btn-outline-danger" data-remove-id="${item.id}">Remover</button>
+              </div>
+            `;
+
+            // Adicionar evento do botão remover
+            row.querySelector('button[data-remove-id]').addEventListener('click', () => removeFromCart(item.id));
+
+            cartItemsListEl.appendChild(row);
+          });
+        }
+
+        // Total
+        cartTotalEl.textContent = formatCurrencyBR(getCartTotal());
+
+        // Oculta área de JSON quando altera carrinho
+        finalJsonArea.classList.add('d-none');
+
+        saveCart(cart);
+      }
+
+      /*************************************************************************
+       * FINALIZAR PEDIDO
+       * - Gera objeto JSON com informações do pedido
+       * - Exibe no modal e cria link para WhatsApp com texto pré-preenchido
+       * Nota: adaptável para integração com backend
+       *************************************************************************/
+      function finalizeOrder(){
+        if(cart.length === 0) return alert('Seu carrinho está vazio');
+
+        const order = {
+          date: new Date().toISOString(),
+          total: Number(getCartTotal().toFixed(2)),
+          items: cart.map(i => ({ id: i.id, name: i.name, price: Number(i.price.toFixed(2)), quantity: i.quantity }))
+        };
+
+        const jsonStr = JSON.stringify(order, null, 2);
+
+        // Exibir JSON no modal
+        finalJsonPre.textContent = jsonStr;
+        finalJsonArea.classList.remove('d-none');
+
+        // Preparar link do WhatsApp (mensagem com JSON)
+        // OBS: O usuário pode alterar o número de destino; aqui deixamos apenas o texto.
+        const whatsappMessage = `Pedido%20de%20Loja%20Virtual%0A%0A${encodeURIComponent(jsonStr)}`;
+        whatsappLink.href = `https://wa.me/5511962784674?text=${whatsappMessage}`;
+      }
+
+      /*************************************************************************
+       * INICIALIZAÇÃO E EVENTOS
+       *************************************************************************/
+      // Renderiza produtos inicialmente
+      renderProducts();
+      updateCartUI();
+
+      // Busca simples
+      const searchInput = document.getElementById('search-input');
+      let searchTimeout = null;
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => renderProducts(searchInput.value), 200);
+      });
+
+      // Botões do modal
+      document.getElementById('checkout-btn').addEventListener('click', finalizeOrder);
+      document.getElementById('clear-cart-btn').addEventListener('click', () => { if(confirm('Remover todos os itens do carrinho?')) clearCart(); });
+      document.getElementById('clear-storage-btn').addEventListener('click', () => { if(confirm('Limpar carrinho e localStorage?')){ clearCart(); localStorage.removeItem(STORAGE_KEY); } });
+
+      // Sempre renderiza o carrinho quando o modal abrir
+      const cartModalEl = document.getElementById('cartModal');
+      cartModalEl.addEventListener('show.bs.modal', updateCartUI);
+
+      /*************************************************************************
+       * Observações finais / como adaptar
+       * - Para alterar produtos: edite o array `products` (cada objeto precisa do campo `id` único)
+       * - Para adicionar quantidade direta no card, crie controles +/- e altere addToCart para aceitar quantidade
+       * - Para enviar para um número específico no WhatsApp: substitua wa.me/?text= por wa.me/<NUMERO>?text=
+       *   Ex.: wa.me/5511999999999?text=...
+       *************************************************************************/
+    </script>
+  </body>
+</html>
